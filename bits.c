@@ -2,7 +2,9 @@
  * CS:APP Data Lab 
  * 
  * <Please put your name and userid here>
- * 
+ *  Name: 梁心一
+ *  UserID: 25800190015
+ *
  * bits.c - Source file with your solutions to the Lab.
  *          This is the file you will hand in to your instructor.
  *
@@ -146,7 +148,8 @@ NOTES:
  *   Rating: 1
  */
 int signMask(void) {
-  return 1;
+  // 1<<31 将1左移31位，得到 0x80000000
+  return 1<<31;
 }
 
 // P2
@@ -158,7 +161,9 @@ int signMask(void) {
  *   Rating: 2
  */
 int bitXor(int x, int y) {
-	return 2;
+  /*~(x&y) 生成剔除 x 和 y 中都为 1 的位的掩码
+  ~(~x&~y) 生成x|y，与掩码按位与就得到异或*/
+	return ~(~x&~y)&(~(x&y));
 }
 
 // P3
@@ -170,7 +175,9 @@ int bitXor(int x, int y) {
  *   Rating: 3
  */
 int negativePart(int x){
-  return 3;
+  //y是x的负值，x>>31，由于算数右移，根据x的正负生成全0或者全1的掩码
+  int y=~x+1;
+  return y&(x>>31);
 }
 
 
@@ -185,7 +192,17 @@ int negativePart(int x){
  *   Rating: 4
  */
 int copyByteWithin(int x, int src, int dst) {
-  return 4;
+  /*
+  1.存下src,dst表示的位移数量，节省<<的出现次数
+  2.用byte提取src位置的字节
+  3.构造在dst位置位0的掩码，将dst位置的字节清0
+  4.将提取的字节写入dst位置
+  */
+  int src_shift=src<<3;
+  int dst_shift=dst<<3;
+  int byte=x>>src_shift&0xFF; 
+  int cleared_x=x&~(0xFF<<dst_shift);
+  return cleared_x|(byte<<dst_shift); 
 }
 
 // P5
@@ -198,7 +215,9 @@ int copyByteWithin(int x, int src, int dst) {
  *   Rating: 4
  */
 int logicalShift(int x, int n) {
-  return 5;
+  //构造最高n位全是0，其余是1的掩码，将其与算术右移的结果&
+  int  mask =~((1<<31)>>n<<1);
+  return (x>>n)&mask;
 }
 
 // P6
@@ -210,7 +229,12 @@ int logicalShift(int x, int n) {
  *   Rating: 4
  */
 int swapNibblePairs(int x) {
-  return 6;
+  //构造x左移四位和右移四位，&两个掩码得到交换结果的一半，再相加得到结果
+  int lx=x<<4;
+  int rx=x>>4;
+  int mask1=0x0F|(0x0F<<8)|(0x0F<<16)|(0x0F<<24);
+  int mask2=mask1<<4;
+  return (lx&mask2)+(rx&mask1);
 }
 
 // P7
@@ -223,7 +247,9 @@ int swapNibblePairs(int x) {
  *   Rating: 4
  */
 int secondLowestZeroBit(int x) {
-  return 7;
+  //用x|(x+1)去掉最低位的0，取反后用lowbit函数找最小的1(即原本次小的0)，如果没找到说明原本0不够2个，自然返回0
+  int y=~(x|(x+1));
+  return y&(~y+1);
 }
 
 // P8
@@ -236,7 +262,13 @@ int secondLowestZeroBit(int x) {
  *   Rating: 5
  */
 int oddParity(int x) {
-  return 8;
+  //二分法，每次把前一半的和后一半的异或，最后最低位就是全部32位异或的结果
+  x=x^(x>>16);
+  x=x^(x>>8);
+  x=x^(x>>4);
+  x=x^(x>>2);
+  x=x^(x>>1);
+  return !(x&1);
 }
 
 // P9
@@ -248,8 +280,19 @@ int oddParity(int x) {
  *   Max ops: 16
  *   Rating: 5
  */
+
 int rotateRightBits(int x, int n) {
-  return 9;
+  /*
+  1.将n取模，防止溢出
+  2.标准逻辑右移得到rx
+  3.将x先左移31-n位再左移1位，利用左移自动溢出抹去高位的特性获取循环回高位的左半部分lx。
+  4.按位或拼接rx与lx得到最终结果。
+ */
+  n=n&31;
+  int mask=~((1<<31)>>n<<1);
+  int rx=x>>n&mask;
+  int lx=x<<(31+~n+1)<<1;
+  return rx|lx;
 }
 
 // P10
@@ -264,7 +307,14 @@ int rotateRightBits(int x, int n) {
  *   Rating: 5
  */
 int roundEvenPow2(int x, int n) {
-  return 10;
+  /*
+  1.h代表半数1<<(n-1)，b为基础偏置量h-1。
+  2.利用(x+b+((x>>n)&1))>>n计算商：大于h自动进位，等于h则仅在商为奇数时进位，小于h不进位。
+  3.将计算得到的商左移n位恢复。
+  */
+  int h=1<<(n+~0);
+  int b=h+~0;
+  return (((x+b)+((x>>n)&1))>>n)<<n;
 }
 
 // P11
@@ -280,7 +330,19 @@ int roundEvenPow2(int x, int n) {
  *   Rating: 5
  */
 int midpointTowardFirst(int x, int y) {
-  return 11;
+  /*
+  1.利用(x&y)+((x^y)>>1)计算无溢出基础平均值。
+  2.当x+y为奇数(diff&1为1)时，右移会自动向下取整偏向较小值：
+  若x>y，结果偏向了较小者y，需+1向较大者x靠拢；
+  若x<y，结果已天然偏向较小者x，无需修正。
+  3.分符号无溢出判断x>y：
+  异号时：x非负即大于y，取(~x>>31)&1；
+  同号时：y-x为负即x>y，取((y+~x)>>31)&1。
+  */
+  int diff=x^y;
+  int diffSign=diff>>31;
+  int xGreater=((diffSign&(~x>>31))|(~diffSign&((y+~x)>>31)))&1;
+  return (x&y)+(diff>>1)+((diff&1)&xGreater);
 }
 
 
@@ -294,7 +356,21 @@ int midpointTowardFirst(int x, int y) {
  *   Rating: 7
  */
 int isBetweenEitherOrder(int x, int a, int b) {
-  return 12;
+/*
+  1.判断x是否介于a和b之间，等价于判断(x-a)和(x-b)是否“异号或至少有一个为0”。
+  2.为了防止减法溢出，先检验符号位
+  若x与端点同号，做减法比较大小；
+  若x与端点异号，由x本身的符号决定大小
+  3.得出x>=a和x>=b成立一个（用异或）
+    或x刚好等于某个端点时返回1。
+  */
+  int diff_a=x^a;
+  int diff_b=x^b;
+  int xa=((~diff_a&(a+~x+1))|(diff_a&~x))>>31&1;
+  int xb= ((~diff_b&(b+~x+1))|(diff_b&~x))>>31&1;
+  int eq_a=!(x^a);
+  int eq_b=!(x^b);
+  return (xa^xb)|(eq_a|eq_b);
 }
 
 // P13
@@ -307,7 +383,17 @@ int isBetweenEitherOrder(int x, int a, int b) {
  *   Rating: 7
  */
 int mul5Sat(int x) {
-  return 13;
+  /*
+  5倍分解为4倍+1倍，如果没有溢出，则4x不能溢出（即前三位要相同）,且5倍不溢出，按照加法溢出判断，5x与x要同号
+  如果正溢出，则正数越乘越小，负溢出则负数越乘越大
+  */
+  int x4=x<<2;
+  int x5=x4+x;
+  int sx=x>>31;
+  int overflow=!!((x>>29)^sx)|!!((x5^x)>>31);
+  int sat=(1<<31)+~sx;
+  int mask=~overflow+1;
+  return (mask&sat)|(~mask&x5);
 }
 
 // P14
@@ -320,7 +406,15 @@ int mul5Sat(int x) {
  *   Rating: 7
  */
 int classifyAdd3(int x, int y, int z) {
-  return 14;
+  /*
+  1.分两步累加并记录每一步的溢出情况：上溢出记为+1，下溢出记为-1
+  2.只有两次溢出的记录和位0（都不溢出或者相反溢出）才符合条件
+  */
+  int s1=x+y;
+  int c1=((~x&~y&s1)>>31&1)-((x&y&~s1)>>31&1);
+  int s2=s1+z;
+  int c2=((~s1&~z&s2)>>31&1)-((s1&z&~s2)>>31&1);
+  return c1+c2;
 }
 
 // P15
