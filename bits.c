@@ -405,15 +405,29 @@ int mul5Sat(int x) {
  *   Max ops: 52
  *   Rating: 7
  */
-int classifyAdd3(int x, int y, int z) {
+int classifyAdd3(int x, int y, int z){
   /*
   1.分两步累加并记录每一步的溢出情况：上溢出记为+1，下溢出记为-1
   2.只有两次溢出的记录和位0（都不溢出或者相反溢出）才符合条件
   */
-  int s1=x+y;
-  int c1=((~x&~y&s1)>>31&1)-((x&y&~s1)>>31&1);
-  int s2=s1+z;
-  int c2=((~s1&~z&s2)>>31&1)-((s1&z&~s2)>>31&1);
+  int s1;
+  int s2;
+  int up1;
+  int down1;
+  int up2;
+  int down2;
+  int c1;
+  int c2;
+  s1=x+y;
+  up1=(~x&~y&s1)>>31&1;
+  down1=(x&y&~s1)>>31&1;
+  c1=up1+~down1+1;
+
+  s2=s1+z;
+  up2=(~s1&~z&s2)>>31&1;
+  down2=(s1&z&~s2)>>31&1;
+  c2=up2+~down2+1;
+
   return c1+c2;
 }
 
@@ -631,16 +645,17 @@ int bitReverse(int x){
   依次交换相邻的1位、2位、4位和8位，最后交换高低16位。
   每轮通过掩码提取，再移位到对应位置并合并
    */
-  int mask1=0x55555555;
-  int mask2=0x33333333;
-  int mask4=0x0F0F0F0F;
-  int mask8=0x00FF00FF;
+  int m8=0xFF|(0xFF<<16);
+  int m4=m8^(m8<<4);
+  int m2=m4^(m4<<2);
+  int m1=m2^(m2<<1);
+  int low16=0xFF|(0xFF<<8);
 
-  x=((x>>1)&mask1)|((x&mask1)<<1);
-  x=((x>>2)&mask2)|((x&mask2)<<2);
-  x=((x>>4)&mask4)|((x&mask4)<<4);
-  x=((x>>8)&mask8)|((x&mask8)<<8);
-  x=(x<<16)|((x>>16)&0xFFFF);
+  x=((x>>1)&m1)|((x&m1)<<1);
+  x=((x>>2)&m2)|((x&m2)<<2);
+  x=((x>>4)&m4)|((x&m4)<<4);
+  x=((x>>8)&m8)|((x&m8)<<8);
+  x=(x<<16)|((x>>16)&low16);
 
   return x;
 }
