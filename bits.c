@@ -430,8 +430,46 @@ int classifyAdd3(int x, int y, int z) {
  *   Max ops: 60
  *   Rating: 7
  */
-unsigned floatScaleThreeHalves(unsigned uf) {
-  return 15;
+unsigned floatScaleThreeHalves(unsigned uf){
+  unsigned sign=uf&0x80000000u;
+  unsigned exp=(uf>>23)&0xFFu;
+  unsigned frac=uf&0x7FFFFFu;
+  unsigned m;
+  unsigned p;
+  unsigned out;
+  unsigned rem;
+
+  if(exp==255u){
+    return uf;
+  }
+  if(exp==0u){
+    m=frac;
+    p=3u*m;
+    out=p>>1;
+    if((p&1u)&&(out&1u)){
+      out=out+1u;
+    }
+    return sign|out;
+  }
+  m=0x800000u|frac;
+  p=3u*m;
+  if(p<0x02000000u){
+    out=p>>1;
+    if((p&1u)&&(out&1u)){
+      out=out+1u;
+    }
+  }else{
+    out=p>>2;
+    rem=p&3u;
+    if(rem>2u||(rem==2u&&(out&1u))){
+      out=out+1u;
+    }
+    exp=exp+1u;
+  }
+  if(exp>=255u){
+    return sign|0x7F800000u;
+  }
+  return sign|(exp<<23)|(out&0x7FFFFFu);
 }
 
 // P16
@@ -446,8 +484,43 @@ unsigned floatScaleThreeHalves(unsigned uf) {
  *   Max ops: 65
  *   Rating: 10
  */
-unsigned floatRoundEven(unsigned uf) {
-  return 16;
+unsigned floatRoundEven(unsigned uf){
+  /*
+  1.提取符号位s、阶码exp。
+  2.处理无小数部分或特殊值(exp>=150)：直接返回uf。
+  3.处理|x|<1的情况：
+  若exp<126（即|x|<0.5）或exp==126且frac==0,（即|x|==0.5）:舍入为0，保留符号位；
+  其它则舍入为1.0，保留符号位。
+  4.处理1<=|x|<2^23(127<=exp<150)的情况：
+  计算小数位数shift=22-E(其中E=exp-127)；
+  构造向偶数舍入偏置量bias；
+  uf加上bias后清零低(shift+1)位小数。
+  */
+  unsigned s=uf&0x80000000u;
+  unsigned exp=(uf>>23)&0xFFu;
+  unsigned shift;
+  unsigned round_bit;
+  unsigned lsb;
+  unsigned bias;
+
+  if(exp>=150u){
+    return uf;
+  }
+
+  if(exp<127u){
+    if(exp<126u||(exp==126u&&(uf&0x7FFFFFu)==0u)){
+      return s;
+    }
+    return s|(127u<<23);
+  }
+
+  shift=149u-exp;
+  round_bit=1u<<shift;
+  lsb=round_bit<<1;
+  bias=round_bit-1u+((uf>>(shift+1u))&1u);
+  uf=uf+bias;
+
+  return s|(uf&~(lsb-1u));
 }
 
 // P17
@@ -460,8 +533,53 @@ unsigned floatRoundEven(unsigned uf) {
  *   Max ops: 40
  *   Rating: 10
  */
-unsigned float_i2f(int x) {
-  return 17;
+unsigned float_i2f(int x){
+  /*：
+  先取出符号位，并用无符号运算求绝对值，以正确处理INT_MIN。
+  再查找绝对值最高有效位的位置，确定浮点数的阶码。
+  将有效数对齐到24位；若需要丢弃低位，则依据最近偶数规则舍入。
+  如果舍入导致有效数进位溢出，就增加阶码，最后组合符号位、阶码和尾数。
+  输入为0时直接返回正零。
+  */
+  unsigned sign;
+  unsigned absX;
+  unsigned exp;
+  unsigned tmp;
+  unsigned shift;
+  unsigned sig;
+  unsigned rem;
+  unsigned half;
+
+  sign=x&0x80000000u;
+  absX=x;
+  if(x<0){
+    absX=~absX+1u;
+  }
+  if(absX==0u){
+    return 0u;
+  }
+  tmp=absX;
+  exp=0u;
+  while(tmp>>1){
+    tmp=tmp>>1;
+    exp=exp+1u;
+  }
+  if(exp<=23u){
+    sig=absX<<(23u-exp);
+  }else{
+    shift=exp-23u;
+    sig=absX>>shift;
+    rem=absX&((1u<<shift)-1u);
+    half=1u<<(shift-1u);
+
+    if(rem>half||(rem==half&&(sig&1u))){
+      sig=sig+1u;
+    }
+    if(sig>>24){
+      exp=exp+1u;
+    }
+  }
+  return sign|((exp+127u)<<23)|(sig&0x7FFFFFu);
 }
 
 
@@ -474,8 +592,29 @@ unsigned float_i2f(int x) {
  *   Max ops: 40
  *   Rating: 10
  */
-int bitCount(int x) {
-  return 18;
+int bitCount(int x){
+  /*
+  先构造掩码，将每一位的计数两两相加。
+  再逐步合并相邻的2位、4位、8位和16位计数，
+  最终得到整个32位整数中1的总数。
+  */
+  int mask1=0x55|(0x55<<8);
+  int mask2=0x33|(0x33<<8);
+  int mask4=0x0F|(0x0F<<8);
+  int mask8=0xFF|(0xFF<<16);
+  int mask16=0xFF|(0xFF<<8);
+
+  mask1=mask1|(mask1<<16);
+  mask2=mask2|(mask2<<16);
+  mask4=mask4|(mask4<<16);
+
+  x=(x&mask1)+((x>>1)&mask1);
+  x=(x&mask2)+((x>>2)&mask2);
+  x=(x&mask4)+((x>>4)&mask4);
+  x=(x&mask8)+((x>>8)&mask8);
+  x=(x&mask16)+((x>>16)&mask16);
+
+  return x;
 }
 
 // P19
@@ -487,7 +626,22 @@ int bitCount(int x) {
  *   Max ops: 34
  *   Rating: 10
  */
-int bitReverse(int x)
-{
-  return 19;
+int bitReverse(int x){
+  /*
+  依次交换相邻的1位、2位、4位和8位，最后交换高低16位。
+  每轮通过掩码提取，再移位到对应位置并合并
+   */
+  int mask1=0x55555555;
+  int mask2=0x33333333;
+  int mask4=0x0F0F0F0F;
+  int mask8=0x00FF00FF;
+
+  x=((x>>1)&mask1)|((x&mask1)<<1);
+  x=((x>>2)&mask2)|((x&mask2)<<2);
+  x=((x>>4)&mask4)|((x&mask4)<<4);
+  x=((x>>8)&mask8)|((x&mask8)<<8);
+  x=(x<<16)|((x>>16)&0xFFFF);
+
+  return x;
 }
+
